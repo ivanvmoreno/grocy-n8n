@@ -1,0 +1,132 @@
+{
+    "WFWorkflowMinimumClientVersionString": "900",
+    "WFWorkflowMinimumClientVersion": 900,
+    "WFWorkflowIcon": {
+        "WFWorkflowIconStartColor": 2071128575,
+        "WFWorkflowIconGlyphNumber": 61440
+    },
+    "WFWorkflowClientVersion": "3607.0.2",
+    "WFWorkflowOutputContentItemClasses": [],
+    "WFWorkflowHasOutputFallback": false,
+    "WFWorkflowActions": [
+        {
+            "WFWorkflowActionIdentifier": "is.workflow.actions.recordaudio",
+            "WFWorkflowActionParameters": {
+                "UUID": "53C1F26D-2EF1-4E78-AAC5-A09075D2A5EE"
+            }
+        },
+        {
+            "WFWorkflowActionIdentifier": "com.apple.ShortcutsActions.TranscribeAudioAction",
+            "WFWorkflowActionParameters": {
+                "UUID": "E67AC36E-4D34-4D89-BA9A-3C70F67F87DC",
+                "audioFile": {
+                    "Value": {
+                        "OutputUUID": "53C1F26D-2EF1-4E78-AAC5-A09075D2A5EE",
+                        "Type": "ActionOutput",
+                        "OutputName": "Recorded Audio"
+                    },
+                    "WFSerializationType": "WFTextTokenAttachment"
+                },
+                "AppIntentDescriptor": {
+                    "TeamIdentifier": "0000000000",
+                    "BundleIdentifier": "com.apple.ShortcutsActions",
+                    "Name": "ShortcutsActions",
+                    "AppIntentIdentifier": "TranscribeAudioAction"
+                }
+            }
+        },
+        {
+            "WFWorkflowActionIdentifier": "is.workflow.actions.downloadurl",
+            "WFWorkflowActionParameters": {
+                "WFJSONValues": {
+                    "Value": {
+                        "WFDictionaryFieldValueItems": [
+                            {
+                                "WFItemType": 0,
+                                "WFKey": {
+                                    "Value": {
+                                        "string": "input"
+                                    },
+                                    "WFSerializationType": "WFTextTokenString"
+                                },
+                                "WFValue": {
+                                    "Value": {
+                                        "string": "￼",
+                                        "attachmentsByRange": {
+                                            "{0, 1}": {
+                                                "OutputUUID": "E67AC36E-4D34-4D89-BA9A-3C70F67F87DC",
+                                                "Type": "ActionOutput",
+                                                "OutputName": "Transcribe Audio"
+                                            }
+                                        }
+                                    },
+                                    "WFSerializationType": "WFTextTokenString"
+                                }
+                            }
+                        ]
+                    },
+                    "WFSerializationType": "WFDictionaryFieldValue"
+                },
+                "UUID": "4C291BBC-1194-463A-B1D8-C8EDE086567A",
+                "ShowHeaders": false,
+                "WFURL": "https:\/\/<n8n_url>\/webhook\/grocy-inventory",
+                "WFHTTPMethod": "POST",
+                "WFHTTPBodyType": "JSON",
+                "WFFormValues": {
+                    "Value": {
+                        "WFDictionaryFieldValueItems": [
+                            {
+                                "WFItemType": 0,
+                                "WFKey": {
+                                    "Value": {
+                                        "string": "input"
+                                    },
+                                    "WFSerializationType": "WFTextTokenString"
+                                },
+                                "WFValue": {
+                                    "Value": {
+                                        "string": "￼",
+                                        "attachmentsByRange": {
+                                            "{0, 1}": {
+                                                "OutputUUID": "E67AC36E-4D34-4D89-BA9A-3C70F67F87DC",
+                                                "Type": "ActionOutput",
+                                                "OutputName": "Transcribe Audio"
+                                            }
+                                        }
+                                    },
+                                    "WFSerializationType": "WFTextTokenString"
+                                }
+                            }
+                        ]
+                    },
+                    "WFSerializationType": "WFDictionaryFieldValue"
+                }
+            }
+        }
+    ],
+    "WFWorkflowInputContentItemClasses": [
+        "WFAppContentItem",
+        "WFAppStoreAppContentItem",
+        "WFArticleContentItem",
+        "WFContactContentItem",
+        "WFDateContentItem",
+        "WFEmailAddressContentItem",
+        "WFFolderContentItem",
+        "WFGenericFileContentItem",
+        "WFImageContentItem",
+        "WFiTunesProductContentItem",
+        "WFLocationContentItem",
+        "WFDCMapsLinkContentItem",
+        "WFAVAssetContentItem",
+        "WFPDFContentItem",
+        "WFPhoneNumberContentItem",
+        "WFRichTextContentItem",
+        "WFSafariWebPageContentItem",
+        "WFStringContentItem",
+        "WFURLContentItem"
+    ],
+    "WFWorkflowImportQuestions": [],
+    "WFWorkflowTypes": [],
+    "WFQuickActionSurfaces": [],
+    "WFWorkflowHasShortcutInputVariables": false
+}

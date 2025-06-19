@@ -1,0 +1,865 @@
+{
+  "name": "Grocy Receipt Input",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "grocery-receipt",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        60,
+        -205
+      ],
+      "id": "c6f6c942-2fd4-493b-8b64-2f911e9f8952",
+      "name": "HTTP Webhook",
+      "webhookId": "94c6854a-3b07-48f8-88b5-8c4c3e05c9a4"
+    },
+    {
+      "parameters": {
+        "jsCode": "function sanitizeLLMJson(text = \"\") {\n  if (typeof text !== \"string\") return \"\";\n\n  let out = text.trim();\n\n  out = out.replace(/^```[\\s\\S]*?\\n/, \"\").replace(/```[\\s\\S]*$/, \"\"); // trailing fence\n\n  const firstBrace = out.indexOf(\"{\");\n  if (firstBrace > 0) out = out.slice(firstBrace);\n\n  const lastBrace = out.lastIndexOf(\"}\");\n  if (lastBrace !== -1) out = out.slice(0, lastBrace + 1);\n\n  out = out.replace(/[“”]/g, '\"').replace(/[‘’]/g, \"'\");\n\n  out = out.replace(/,\\s*([}\\]])/g, \"$1\");\n\n  return out.trim();\n}\n\nconst rawReceipt = $(\"parsed_receipt\").last().json.content;\nconst ai = JSON.parse(sanitizeLLMJson(rawReceipt));\n\nconst list = (k) =>\n  $(k)\n    .all()\n    .map((x) => x.json);\n\nconst products = list(\"grocy_products\");\nconst groups = list(\"grocy_product_groups\");\nconst stores = list(\"grocy_stores\");\nconst locations = list(\"grocy_locations\");\n\nconst productMap = new Map(\n  products.filter((p) => p.name).map((p) => [p.name.toLowerCase(), p]),\n);\n\nconst findId = (arr, label) => {\n  if (!label) return null;\n  const hit = arr.find(\n    (e) => e.name && e.name.toLowerCase() === label.toLowerCase(),\n  );\n  return hit ? hit.id : null;\n};\n\nconst storeId = findId(stores, ai.store_name);\n\nconst out = [];\n\n(ai.items || []).forEach((item) => {\n  if (!item || !item.name) return;\n\n  const groupId = findId(groups, item.group);\n  const locationId = findId(locations, item.location);\n\n  const base = {\n    quantity: item.quantity ?? 1,\n    price: item.unit_price ?? 0,\n    purchase_date: ai.receipt_date,\n    best_before_date: new Date(\n      Date.parse(ai.receipt_date) + (item.shelf_life ?? 0) * 86400000,\n    )\n      .toISOString()\n      .slice(0, 10),\n    product_group_id: groupId,\n    shopping_location_id: storeId,\n    location_id: locationId,\n  };\n\n  const hit = productMap.get(item.name.toLowerCase());\n\n  out.push(\n    hit\n      ? { action: \"add_stock\", product_id: hit.id, ...base }\n      : {\n          action: \"create_product\",\n          name: item.name,\n          shelf_life: item.shelf_life ?? null,\n          ...base,\n        },\n  );\n});\n\nreturn out.map((j) => ({ json: j }));\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        940,
+        -180
+      ],
+      "id": "01cf2e0f-2010-4dc4-8eef-a0709ba99dbc",
+      "name": "Process Receipt Items"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "create-condition",
+              "leftValue": "={{ $json.action }}",
+              "rightValue": "create_product",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1160,
+        -180
+      ],
+      "id": "c1eb8cdf-c45d-41f7-a5a1-763a5f756ca8",
+      "name": "Check Action Type"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://<grocy_url>/api/objects/products",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"name\":\"{{$json.name}}\",\n  \"product_group_id\": \"{{ $json.product_group_id }}\",\n  \"location_id\": \"{{ $json.location_id }}\",\n  \"qu_id_purchase\":1,\n  \"qu_id_stock\":1,\n  \"min_stock_amount\":0\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1380,
+        -355
+      ],
+      "id": "99f774ef-68e6-4fee-bbc0-b0e7f0114f04",
+      "name": "Create New Product",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ql3383sOg68fAQWG",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://<grocy_url>/api/objects/products",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        280,
+        -580
+      ],
+      "id": "cb7a9767-4967-4c99-9f4d-ac037bce6f33",
+      "name": "grocy_products",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ql3383sOg68fAQWG",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "image",
+        "operation": "analyze",
+        "modelId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4o"
+        },
+        "text": "=Analyze this grocery receipt and extract the following information for each item:\n1. Product name (generic, no brand words)\n2. Quantity purchased\n3. Unit price\n4. Total line price\n5. Purchase date from receipt\n6. Estimated shelf life in days\nReturn JSON (no markdown):\n{\n  \"receipt_date\":\"YYYY-MM-DD\",\n  \"store_name\":\"(if visible)\",\n  \"items\":[\n    {\n      \"name\":\"Product Name\",\n      \"quantity\":<num>,\n      \"unit_price\":<unit_price>,\n      \"total_price\":<total>,\n      \"shelf_life\":<days>,\n      \"group\":<matched_product_group>,\n      \"location\":<product_storage_location>\n    }\n  ]\n}\nExisting products (match if possible): {{ $('grocy_products').all().map((item) => item.json.name).filter(item => item)}}\nValid values for group: {{$('grocy_product_groups').all().map(i=>i.json.name)}}  \nValid values for location: {{$('grocy_locations').all().map(i=>i.json.name)}}  \nValid store list: {{$('grocy_stores').all().map(i=>i.json.name)}}",
+        "inputType": "base64",
+        "binaryPropertyName": "file",
+        "options": {
+          "maxTokens": 1000
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        720,
+        -180
+      ],
+      "id": "4fc97a20-ff9b-4dad-b68f-31d7c5fc3576",
+      "name": "parsed_receipt",
+      "credentials": {
+        "openAiApi": {
+          "id": "dIKZO4hhuxDVSObY",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "chooseBranch",
+        "numberInputs": 5,
+        "useDataOfInput": 5
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        500,
+        -222
+      ],
+      "id": "7cab1a14-3a57-4a08-8afe-e909b02af8ef",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "operation": "resize",
+        "dataPropertyName": "file",
+        "width": 50,
+        "height": 50,
+        "resizeOption": "percent",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.editImage",
+      "typeVersion": 1,
+      "position": [
+        280,
+        220
+      ],
+      "id": "26554c43-8a12-4321-b9b1-b900bec4b972",
+      "name": "Edit Image"
+    },
+    {
+      "parameters": {
+        "url": "https://<grocy_url>/api/objects/locations",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        280,
+        -380
+      ],
+      "id": "e61dd740-3e77-406a-949e-87bd2f0aed36",
+      "name": "grocy_locations",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ql3383sOg68fAQWG",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://<grocy_url>/api/objects/product_groups",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        280,
+        -180
+      ],
+      "id": "4057b59c-c17c-45c0-a73f-826316404011",
+      "name": "grocy_product_groups",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ql3383sOg68fAQWG",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://<grocy_url>/api/objects/shopping_locations",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        280,
+        20
+      ],
+      "id": "87e36e45-c2c8-4bbf-a147-54bddd3be0af",
+      "name": "grocy_stores",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ql3383sOg68fAQWG",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1600,
+        -280
+      ],
+      "id": "0294a39f-7bb8-4d15-a6d3-09652629b5d9",
+      "name": "Merge1"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://<grocy_url>/api/stock/products/{{ $json.created_object_id }}/add",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"amount\":{{$json.quantity}},\n  \"price\":{{$json.price}},\n  \"transaction_type\":\"purchase\",\n  \"purchased_date\":\"{{$json.purchase_date}}\",\n  \"best_before_date\":\"{{$json.best_before_date}}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1820,
+        -280
+      ],
+      "id": "b04a72fc-dea9-4591-a5c4-8f206415983a",
+      "name": "Add Stock - New Product",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ql3383sOg68fAQWG",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://<grocy_url>/api/stock/products/{{ $json.product_id }}/add",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"amount\":{{$json.quantity}},\n  \"price\":{{$json.price}},\n  \"transaction_type\":\"purchase\",\n  \"purchased_date\":\"{{$json.purchase_date}}\",\n  \"best_before_date\":\"{{$json.best_before_date}}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1820,
+        -55
+      ],
+      "id": "a5597ab9-464e-405e-b9ce-4e6b13f83020",
+      "name": "Add Stock - Existing Product",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ql3383sOg68fAQWG",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * Grocery-receipt summary (Markdown, no tables)\n * --------------------------------------------\n * – Handles BOTH paths: new products & stock-only items\n * – Computes running cost totals\n * – Bullet-list output that any MD renderer can show\n */\n\n/* helpers ---------------------------------------------------------- */\n\nconst items = $input.all().map(i => i.json);          // everything that just ran\n\nconst products = $(\"grocy_products\").all().map(x => x.json);\nconst productName = id => products.find(p => p.id === id)?.name ?? `#${id}`;\n\nconst fmtDate = d => d ?? \"—\";\nconst money   = v => (v ?? 0).toFixed(2);\n\n/* build the list --------------------------------------------------- */\n\nlet grandTotal = 0;\n\nconst lines = items.map((it, idx) => {\n  const name = it.action === \"create_product\" ? it.name : productName(it.product_id);\n  const cost = (it.price ?? 0) * (it.amount ?? 1);\n  grandTotal += cost;\n\n  return (\n    `- **${idx + 1}. ${name}** — ` +\n    (it.action === \"create_product\" ? \"created & \" : \"\") +\n    `added \\`${it.amount}\\` @€${money(it.price)} ` +\n    `(BB: ${fmtDate(it.best_before_date)}) → €${money(cost)}`\n  );\n});\n\n/* stitch together -------------------------------------------------- */\n\nconst summary_md = [\n  \"### Grocery Receipt Import\",\n  \"\",\n  ...lines,\n  \"\",\n  `**Total cost:** €${money(grandTotal)}`\n].join(\"\\n\");\n\n/* return for the rest of the flow ---------------------------------- */\n\nreturn [{\n  json: {\n    timestamp: new Date().toISOString(),\n    total_items : items.length,\n    total_cost  : grandTotal,\n    items,            // raw data\n    summary_md        // pretty report\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2040,
+        -180
+      ],
+      "id": "17c20991-f770-4acc-ae9f-6dd5bcb56e92",
+      "name": "Create Summary"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://<ntfy_url>/n8n-workflows",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Markdown",
+              "value": "true"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "text/markdown",
+        "body": "={{ $json.summary_md }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2260,
+        -180
+      ],
+      "id": "59e6164a-409b-4f4b-bc33-533abb6e4766",
+      "name": "ntfy",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ql3383sOg68fAQWG",
+          "name": "Header Auth account"
+        },
+        "httpBearerAuth": {
+          "id": "Mw942rsjhx7pSuk5",
+          "name": "Bearer Auth account"
+        }
+      }
+    }
+  ],
+  "pinData": {
+    "Add Stock - Existing Product": [
+      {
+        "json": {
+          "id": 94,
+          "product_id": 40,
+          "amount": 6,
+          "best_before_date": "2025-06-10",
+          "purchased_date": "2025-06-03",
+          "used_date": null,
+          "spoiled": 0,
+          "stock_id": "684b38dee4263",
+          "transaction_type": "purchase",
+          "price": 0.96,
+          "undone": 0,
+          "undone_timestamp": null,
+          "opened_date": null,
+          "location_id": 2,
+          "recipe_id": null,
+          "correlation_id": null,
+          "transaction_id": "684c534fd7889",
+          "stock_row_id": null,
+          "shopping_location_id": null,
+          "user_id": 1,
+          "row_created_timestamp": "2025-06-13 18:35:27",
+          "note": null
+        }
+      },
+      {
+        "json": {
+          "id": 101,
+          "product_id": 45,
+          "amount": 1,
+          "best_before_date": "2025-06-08",
+          "purchased_date": "2025-06-03",
+          "used_date": null,
+          "spoiled": 0,
+          "stock_id": "684c52bbca44b",
+          "transaction_type": "purchase",
+          "price": 2.99,
+          "undone": 0,
+          "undone_timestamp": null,
+          "opened_date": null,
+          "location_id": 2,
+          "recipe_id": null,
+          "correlation_id": null,
+          "transaction_id": "684c53500b6b2",
+          "stock_row_id": null,
+          "shopping_location_id": null,
+          "user_id": 1,
+          "row_created_timestamp": "2025-06-13 18:35:28",
+          "note": null
+        }
+      },
+      {
+        "json": {
+          "id": 93,
+          "product_id": 1,
+          "amount": 3,
+          "best_before_date": "2025-06-13",
+          "purchased_date": "2025-06-03",
+          "used_date": null,
+          "spoiled": 0,
+          "stock_id": "684b39232310e",
+          "transaction_type": "purchase",
+          "price": 1.29,
+          "undone": 0,
+          "undone_timestamp": null,
+          "opened_date": null,
+          "location_id": 2,
+          "recipe_id": null,
+          "correlation_id": null,
+          "transaction_id": "684c534fcd1d5",
+          "stock_row_id": null,
+          "shopping_location_id": null,
+          "user_id": 1,
+          "row_created_timestamp": "2025-06-13 18:35:27",
+          "note": null
+        }
+      },
+      {
+        "json": {
+          "id": 99,
+          "product_id": 43,
+          "amount": 1,
+          "best_before_date": "2025-06-13",
+          "purchased_date": "2025-06-03",
+          "used_date": null,
+          "spoiled": 0,
+          "stock_id": "684b38dedcf21",
+          "transaction_type": "purchase",
+          "price": 2.9,
+          "undone": 0,
+          "undone_timestamp": null,
+          "opened_date": null,
+          "location_id": 2,
+          "recipe_id": null,
+          "correlation_id": null,
+          "transaction_id": "684c534fec575",
+          "stock_row_id": null,
+          "shopping_location_id": null,
+          "user_id": 1,
+          "row_created_timestamp": "2025-06-13 18:35:28",
+          "note": null
+        }
+      },
+      {
+        "json": {
+          "id": 91,
+          "product_id": 4,
+          "amount": 2,
+          "best_before_date": "2025-07-03",
+          "purchased_date": "2025-06-03",
+          "used_date": null,
+          "spoiled": 0,
+          "stock_id": "684b163242b1e",
+          "transaction_type": "purchase",
+          "price": 1.99,
+          "undone": 0,
+          "undone_timestamp": null,
+          "opened_date": null,
+          "location_id": 2,
+          "recipe_id": null,
+          "correlation_id": null,
+          "transaction_id": "684c534fc499f",
+          "stock_row_id": null,
+          "shopping_location_id": null,
+          "user_id": 1,
+          "row_created_timestamp": "2025-06-13 18:35:27",
+          "note": null
+        }
+      },
+      {
+        "json": {
+          "id": 100,
+          "product_id": 10,
+          "amount": 1,
+          "best_before_date": "2025-06-08",
+          "purchased_date": "2025-06-03",
+          "used_date": null,
+          "spoiled": 0,
+          "stock_id": "684b392323160",
+          "transaction_type": "purchase",
+          "price": 1.69,
+          "undone": 0,
+          "undone_timestamp": null,
+          "opened_date": null,
+          "location_id": 1,
+          "recipe_id": null,
+          "correlation_id": null,
+          "transaction_id": "684c534fe98ed",
+          "stock_row_id": null,
+          "shopping_location_id": null,
+          "user_id": 1,
+          "row_created_timestamp": "2025-06-13 18:35:28",
+          "note": null
+        }
+      },
+      {
+        "json": {
+          "id": 97,
+          "product_id": 41,
+          "amount": 3,
+          "best_before_date": "2025-08-02",
+          "purchased_date": "2025-06-03",
+          "used_date": null,
+          "spoiled": 0,
+          "stock_id": "684c52bbcbb6c",
+          "transaction_type": "purchase",
+          "price": 1.39,
+          "undone": 0,
+          "undone_timestamp": null,
+          "opened_date": null,
+          "location_id": 3,
+          "recipe_id": null,
+          "correlation_id": null,
+          "transaction_id": "684c534fe8a16",
+          "stock_row_id": null,
+          "shopping_location_id": null,
+          "user_id": 1,
+          "row_created_timestamp": "2025-06-13 18:35:27",
+          "note": null
+        }
+      },
+      {
+        "json": {
+          "id": 95,
+          "product_id": 13,
+          "amount": 1,
+          "best_before_date": "2026-06-03",
+          "purchased_date": "2025-06-03",
+          "used_date": null,
+          "spoiled": 0,
+          "stock_id": "684b39232b8d3",
+          "transaction_type": "purchase",
+          "price": 0.15,
+          "undone": 0,
+          "undone_timestamp": null,
+          "opened_date": null,
+          "location_id": 1,
+          "recipe_id": null,
+          "correlation_id": null,
+          "transaction_id": "684c534fd857b",
+          "stock_row_id": null,
+          "shopping_location_id": null,
+          "user_id": 1,
+          "row_created_timestamp": "2025-06-13 18:35:27",
+          "note": null
+        }
+      },
+      {
+        "json": {
+          "id": 92,
+          "product_id": 39,
+          "amount": 2,
+          "best_before_date": "2025-07-03",
+          "purchased_date": "2025-06-03",
+          "used_date": null,
+          "spoiled": 0,
+          "stock_id": "684c52bbc3a7e",
+          "transaction_type": "purchase",
+          "price": 0.89,
+          "undone": 0,
+          "undone_timestamp": null,
+          "opened_date": null,
+          "location_id": 3,
+          "recipe_id": null,
+          "correlation_id": null,
+          "transaction_id": "684c534fcbfe0",
+          "stock_row_id": null,
+          "shopping_location_id": null,
+          "user_id": 1,
+          "row_created_timestamp": "2025-06-13 18:35:27",
+          "note": null
+        }
+      },
+      {
+        "json": {
+          "id": 98,
+          "product_id": 44,
+          "amount": 1,
+          "best_before_date": "2025-06-13",
+          "purchased_date": "2025-06-03",
+          "used_date": null,
+          "spoiled": 0,
+          "stock_id": "684c52bbe8297",
+          "transaction_type": "purchase",
+          "price": 1.99,
+          "undone": 0,
+          "undone_timestamp": null,
+          "opened_date": null,
+          "location_id": 2,
+          "recipe_id": null,
+          "correlation_id": null,
+          "transaction_id": "684c534fcbf48",
+          "stock_row_id": null,
+          "shopping_location_id": null,
+          "user_id": 1,
+          "row_created_timestamp": "2025-06-13 18:35:27",
+          "note": null
+        }
+      },
+      {
+        "json": {
+          "id": 96,
+          "product_id": 42,
+          "amount": 1,
+          "best_before_date": "2025-11-30",
+          "purchased_date": "2025-06-03",
+          "used_date": null,
+          "spoiled": 0,
+          "stock_id": "684b395123119",
+          "transaction_type": "purchase",
+          "price": 2.99,
+          "undone": 0,
+          "undone_timestamp": null,
+          "opened_date": null,
+          "location_id": 3,
+          "recipe_id": null,
+          "correlation_id": null,
+          "transaction_id": "684c534fde24a",
+          "stock_row_id": null,
+          "shopping_location_id": null,
+          "user_id": 1,
+          "row_created_timestamp": "2025-06-13 18:35:27",
+          "note": null
+        }
+      }
+    ]
+  },
+  "connections": {
+    "HTTP Webhook": {
+      "main": [
+        [
+          {
+            "node": "grocy_products",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Edit Image",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "grocy_locations",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "grocy_product_groups",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "grocy_stores",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Receipt Items": {
+      "main": [
+        [
+          {
+            "node": "Check Action Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Action Type": {
+      "main": [
+        [
+          {
+            "node": "Create New Product",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 1
+          }
+        ],
+        [
+          {
+            "node": "Add Stock - Existing Product",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create New Product": {
+      "main": [
+        [
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "grocy_products": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "parsed_receipt": {
+      "main": [
+        [
+          {
+            "node": "Process Receipt Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "parsed_receipt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Image": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 4
+          }
+        ]
+      ]
+    },
+    "grocy_locations": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "grocy_product_groups": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "grocy_stores": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Merge1": {
+      "main": [
+        [
+          {
+            "node": "Add Stock - New Product",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add Stock - New Product": {
+      "main": [
+        [
+          {
+            "node": "Create Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Summary": {
+      "main": [
+        [
+          {
+            "node": "ntfy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add Stock - Existing Product": {
+      "main": [
+        [
+          {
+            "node": "Create Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1a1aaafe-6b62-480f-9e5c-1bccf5c03b14",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "18fa5fc8e029835e2b60615a5ff885979a907d5cc9fb0d0455e7460624ec3264"
+  },
+  "id": "e06H4PHCZuZtwLKQ",
+  "tags": []
+}

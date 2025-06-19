@@ -1,0 +1,81 @@
+{
+    "WFWorkflowMinimumClientVersionString": "900",
+    "WFWorkflowMinimumClientVersion": 900,
+    "WFWorkflowIcon": {
+        "WFWorkflowIconStartColor": 2071128575,
+        "WFWorkflowIconGlyphNumber": 61440
+    },
+    "WFWorkflowClientVersion": "3607.0.2",
+    "WFWorkflowOutputContentItemClasses": [],
+    "WFWorkflowHasOutputFallback": false,
+    "WFWorkflowActions": [
+        {
+            "WFWorkflowActionIdentifier": "is.workflow.actions.takephoto",
+            "WFWorkflowActionParameters": {
+                "UUID": "E18CE527-76E5-4CFB-BECE-149FE4718CD9"
+            }
+        },
+        {
+            "WFWorkflowActionIdentifier": "is.workflow.actions.downloadurl",
+            "WFWorkflowActionParameters": {
+                "WFHTTPBodyType": "Form",
+                "ShowHeaders": false,
+                "UUID": "4C291BBC-1194-463A-B1D8-C8EDE086567A",
+                "WFFormValues": {
+                    "Value": {
+                        "WFDictionaryFieldValueItems": [
+                            {
+                                "WFItemType": 5,
+                                "WFKey": {
+                                    "Value": {
+                                        "string": "file"
+                                    },
+                                    "WFSerializationType": "WFTextTokenString"
+                                },
+                                "WFValue": {
+                                    "Value": {
+                                        "Value": {
+                                            "OutputUUID": "E18CE527-76E5-4CFB-BECE-149FE4718CD9",
+                                            "Type": "ActionOutput",
+                                            "OutputName": "Photo"
+                                        },
+                                        "WFSerializationType": "WFTextTokenAttachment"
+                                    },
+                                    "WFSerializationType": "WFTokenAttachmentParameterState"
+                                }
+                            }
+                        ]
+                    },
+                    "WFSerializationType": "WFDictionaryFieldValue"
+                },
+                "WFURL": "https:\/\/<n8n_url>\/webhook\/grocery-receipt",
+                "WFHTTPMethod": "POST"
+            }
+        }
+    ],
+    "WFWorkflowInputContentItemClasses": [
+        "WFAppContentItem",
+        "WFAppStoreAppContentItem",
+        "WFArticleContentItem",
+        "WFContactContentItem",
+        "WFDateContentItem",
+        "WFEmailAddressContentItem",
+        "WFFolderContentItem",
+        "WFGenericFileContentItem",
+        "WFImageContentItem",
+        "WFiTunesProductContentItem",
+        "WFLocationContentItem",
+        "WFDCMapsLinkContentItem",
+        "WFAVAssetContentItem",
+        "WFPDFContentItem",
+        "WFPhoneNumberContentItem",
+        "WFRichTextContentItem",
+        "WFSafariWebPageContentItem",
+        "WFStringContentItem",
+        "WFURLContentItem"
+    ],
+    "WFWorkflowImportQuestions": [],
+    "WFWorkflowTypes": [],
+    "WFQuickActionSurfaces": [],
+    "WFWorkflowHasShortcutInputVariables": false
+}

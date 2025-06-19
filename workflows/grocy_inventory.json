@@ -1,0 +1,564 @@
+{
+  "name": "Grocy Inventory",
+  "nodes": [
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://<grocy_url>/api/stock/products/{{ $json.product_id }}/consume",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"amount\": {{ $json.quantity }},\n  \"transaction_type\": \"consume\",\n  \"spoiled\": {{ $json.action === 'trash' ? 'true' : 'false' }}\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        136,
+        -20
+      ],
+      "id": "43674929-75b8-4717-ba6d-e74bbd91c802",
+      "name": "Consume Stock",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ql3383sOg68fAQWG",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * Stock-transaction summary without tables\n * ---------------------------------------\n * – Bullet list instead of a pipe table\n * – Same helpers as before\n */\n\nconst items = $input.all().map(i => i.json);\n\n// look-up helpers ----------------------------------------------------\nconst products = $(\"grocy_products\").all().map(x => x.json);\nconst productName = id => products.find(p => p.id === id)?.name ?? `#${id}`;\nconst yesNo       = v  => v ? 'Yes' : 'No';\nconst fmtDate     = d  => d ?? '—';\n\n// build the markdown -------------------------------------------------\nconst summary_md = [\n  '### Stock Transactions Report',\n  '',\n  ...items.map((t, idx) =>\n    `- **${idx + 1}. ${productName(t.product_id)}** — ` +\n    `${t.transaction_type} \\`${Math.abs(t.amount)}\\` ` +\n    `(BB: ${fmtDate(t.best_before_date)}, ` +\n    `Used: ${fmtDate(t.used_date)}, ` +\n    `Spoiled: ${yesNo(t.spoiled)})`\n  ),\n].join('\\n');\n\n// return -------------------------------------------------------------\nreturn [{\n  json: {\n    timestamp: new Date().toISOString(),\n    total_transactions: items.length,\n    transactions: items,      // raw data\n    summary_md,               // bullet-list report\n  },\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        356,
+        80
+      ],
+      "id": "6cd3315d-22ee-47b0-9fbb-b95e0e207107",
+      "name": "Create Summary"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "grocy-inventory",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -1340,
+        80
+      ],
+      "id": "27f94174-70e6-46b2-be79-bbb878044372",
+      "name": "inventory_input",
+      "webhookId": "inventory-webhook-id"
+    },
+    {
+      "parameters": {
+        "url": "https://<grocy_url>/api/objects/products",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1042,
+        -120
+      ],
+      "id": "73f000d4-b447-421b-8475-d5fe30d5a398",
+      "name": "grocy_products",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ql3383sOg68fAQWG",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://<grocy_url>/api/objects/locations",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1042,
+        80
+      ],
+      "id": "70b79a3c-d726-4783-a2b5-e05331730999",
+      "name": "grocy_locations",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ql3383sOg68fAQWG",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://<grocy_url>/api/objects/product_groups",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1042,
+        280
+      ],
+      "id": "92432dab-7583-4545-b474-fa93b7adace1",
+      "name": "grocy_product_groups",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ql3383sOg68fAQWG",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o",
+          "mode": "list",
+          "cachedResultName": "GPT-4O"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=You are an inventory management assistant. Parse the user's inventory input and return a JSON array with the following structure for each item:\n\n{\n  \"action\": \"consume\" | \"add\" | \"set\",\n  \"product_name\": \"string\",\n  \"quantity\": number,\n  \"unit\": \"pack\" | \"piece\" | \"can\"\n}\n\nAction types:\n- \"consume\": User used/consumed items (cooking, throwing away)\n- \"add\": User acquired new items\n- \"set\": User is doing a complete inventory count\n\nExamples:\n- \"I used 3 eggs\" → {\"action\": \"consume\", \"product_name\": \"eggs\", \"quantity\": 3}\n- \"I have 10 apples\" → {\"action\": \"set\", \"product_name\": \"apples\", \"quantity\": 10}\n- \"I bought 2 bottles of milk\" → {\"action\": \"add\", \"product_name\": \"milk\", \"quantity\": 2, \"unit\": \"bottles\"}\n\nReturn only valid JSON array, no other text.\n\nUser input: {{ $('inventory_input').item.json.body.input }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        -1120,
+        -320
+      ],
+      "id": "efc80034-1835-46bc-9c78-8d953be96728",
+      "name": "parse_inventory",
+      "executeOnce": true,
+      "credentials": {
+        "openAiApi": {
+          "id": "dIKZO4hhuxDVSObY",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "function sanitizeLLMJson(text = \"\") {\n  if (typeof text !== \"string\") return \"\";\n\n  let out = text.trim();\n\n  // Remove code fences\n  out = out.replace(/^``````[\\s\\S]*$/, \"\");\n\n  // Find JSON boundaries\n  const firstBrace = out.indexOf(\"[\");\n  if (firstBrace > 0) out = out.slice(firstBrace);\n\n  const lastBrace = out.lastIndexOf(\"]\");\n  if (lastBrace !== -1) out = out.slice(0, lastBrace + 1);\n\n  // Fix common JSON issues\n  out = out.replace(/[\"\"]/g, '\"').replace(/['']/g, \"'\");\n  out = out.replace(/,\\s*([}\\]])/g, \"$1\");\n\n  return out.trim();\n}\n\n// Get the OpenAI response\nconst aiResponse = $(\"parse_inventory\").first().json.message.content;\nconst sanitizedJson = sanitizeLLMJson(aiResponse);\n\nlet parsedItems;\ntry {\n  parsedItems = JSON.parse(sanitizedJson);\n} catch (error) {\n  console.error(\"Failed to parse AI response:\", error);\n  return [];\n}\n\nconsole.log(parsedItems);\n// Get reference data\nconst products = $(\"grocy_products\")\n  .all()\n  .map((x) => x.json);\nconst locations = $(\"grocy_locations\")\n  .all()\n  .map((x) => x.json);\nconst productGroups = $(\"grocy_product_groups\")\n  .all()\n  .map((x) => x.json);\nconst stock = $(\"grocy_stock\")\n  .all()\n  .map((x) => x.json);\n\n// Create lookup maps\nconst productMap = new Map(\n  products.filter((p) => p.name).map((p) => [p.name.toLowerCase(), p]),\n);\n\nconst stockMap = new Map(stock.map((p) => [p.product_id, p.amount]));\n\nconst findProduct = (name) => {\n  const exactMatch = productMap.get(name.toLowerCase());\n  if (exactMatch) return exactMatch;\n\n  // Try fuzzy matching\n  for (const [productName, product] of productMap) {\n    if (\n      productName.includes(name.toLowerCase()) ||\n      name.toLowerCase().includes(productName)\n    ) {\n      return product;\n    }\n  }\n  return null;\n};\n\nconst findLocation = (name) => {\n  if (!name)\n    return (\n      locations.find((l) => l.name.toLowerCase().includes(\"default\")) ||\n      locations[0]\n    );\n  return (\n    locations.find((l) => l.name.toLowerCase() === name.toLowerCase()) ||\n    locations[0]\n  );\n};\n\n// Process each inventory item\nconst processedItems = [];\n\nparsedItems.forEach((item, index) => {\n  if (!item.product_name || !item.quantity) {\n    console.warn(`Skipping invalid item at index ${index}:`, item);\n    return;\n  }\n\n  const product = findProduct(item.product_name);\n  const defaultLocation = findLocation();\n  const parsedQuantity = Math.abs(parseFloat(item.quantity));\n  const currStock = product ? stockMap.get(product.id) || 0 : 0;\n\n  const processedItem = {\n    index: index,\n    original_item: item,\n    action: item.action || \"consume\",\n    product_name: item.product_name,\n    quantity:\n      item.action === \"consume\"\n        ? Math.min(parsedQuantity, currStock)\n        : parsedQuantity,\n    unit: item.unit || \"piece\",\n    notes: item.notes || \"\",\n    product_id: product ? product.id : null,\n    product_exists: !!product,\n    location_id: defaultLocation ? defaultLocation.id : 1,\n    product_group_id: product\n      ? product.product_group_id\n      : productGroups[0]\n        ? productGroups[0].id\n        : null,\n  };\n\n  processedItems.push(processedItem);\n});\n\nreturn processedItems.map((item) => ({ json: item }));\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -524,
+        80
+      ],
+      "id": "9cd50d6a-2185-42dd-9bff-edcf7223bce1",
+      "name": "match_information"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "action-type",
+              "leftValue": "={{ $json.action }}",
+              "rightValue": "consume",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -84,
+        80
+      ],
+      "id": "abeef182-6d0d-4a7b-9dec-dd02b9dcd2be",
+      "name": "Action Type"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "d4a3297d-05f5-40e7-9aa7-4f8b46b2237b",
+              "leftValue": "={{ $input.item.json.product_exists}}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "51d947e4-37f8-4eb9-aa56-42525be2c64e",
+              "leftValue": "={{ $json.action === \"consume\" && $json.quantity > 0 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        -304,
+        80
+      ],
+      "id": "64b1cf84-1ef9-49eb-9ee8-64a913aebe10",
+      "name": "Filter",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://<grocy_url>/api/stock/products/{{ $json.product_id }}/inventory",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"new_amount\": {{ $json.quantity }},\n  \"location_id\": {{ $json.location_id }}\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        140,
+        180
+      ],
+      "id": "c3d4fd87-dc49-4a2f-85b2-15688e1e1bcc",
+      "name": "Set Inventory",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ql3383sOg68fAQWG",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://<grocy_url>/api/stock",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1042,
+        480
+      ],
+      "id": "9a4b86fe-ee28-4c66-8214-60a08188d63c",
+      "name": "grocy_stock",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ql3383sOg68fAQWG",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://<ntfy_url>/n8n-workflows",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Markdown",
+              "value": "true"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "text/markdown",
+        "body": "={{ $json.summary_md }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        576,
+        80
+      ],
+      "id": "cce9fb30-3f00-4ae2-a2a1-2975915f7933",
+      "name": "ntfy",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ql3383sOg68fAQWG",
+          "name": "Header Auth account"
+        },
+        "httpBearerAuth": {
+          "id": "Mw942rsjhx7pSuk5",
+          "name": "Bearer Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "chooseBranch",
+        "numberInputs": 5
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -744,
+        38
+      ],
+      "id": "38b0d17d-9bdd-4d60-8c8c-435ac25b1856",
+      "name": "Merge"
+    }
+  ],
+  "pinData": {
+    "inventory_input": [
+      {
+        "json": {
+          "headers": {
+            "host": "<n8n_url>",
+            "user-agent": "HTTPie/3.2.4",
+            "content-length": "99",
+            "accept": "application/json, */*;q=0.5",
+            "accept-encoding": "gzip, deflate",
+            "content-type": "application/json",
+            "x-forwarded-for": "79.112.7.38",
+            "x-forwarded-host": "<n8n_url>",
+            "x-forwarded-port": "443",
+            "x-forwarded-proto": "https",
+            "x-forwarded-server": "fc07ff39d5a1",
+            "x-real-ip": "79.112.7.38"
+          },
+          "params": {},
+          "query": {},
+          "body": {
+            "input": "I'm making some pasta, used half a pack and one block of feta cheese"
+          },
+          "webhookUrl": "https://<n8n_url>/webhook-test/inventory-update",
+          "executionMode": "test"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Consume Stock": {
+      "main": [
+        [
+          {
+            "node": "Create Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "inventory_input": {
+      "main": [
+        [
+          {
+            "node": "parse_inventory",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "grocy_products",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "grocy_locations",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "grocy_product_groups",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "grocy_stock",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "grocy_products": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "grocy_locations": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "grocy_product_groups": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "parse_inventory": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "match_information": {
+      "main": [
+        [
+          {
+            "node": "Filter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Action Type": {
+      "main": [
+        [
+          {
+            "node": "Consume Stock",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Set Inventory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter": {
+      "main": [
+        [
+          {
+            "node": "Action Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Inventory": {
+      "main": [
+        [
+          {
+            "node": "Create Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "grocy_stock": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 4
+          }
+        ]
+      ]
+    },
+    "Create Summary": {
+      "main": [
+        [
+          {
+            "node": "ntfy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "match_information",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "0ae77ad5-cf08-4522-9a52-22b7b2f65e13",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "18fa5fc8e029835e2b60615a5ff885979a907d5cc9fb0d0455e7460624ec3264"
+  },
+  "id": "FdK7iQuHrl94x0Xw",
+  "tags": []
+}
