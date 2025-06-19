@@ -10,8 +10,6 @@ n8n workflows for automating grocery inventory management with Grocy.
 
 ![Grocy Receipt Processor](docs/img/grocy_receipt.png)
 
-![ntfy Notification](docs/img/ntfy_receipt.png)
-
 Automatically processes grocery receipt images using a vLLM to extract items and add them to Grocy.
 
 **Features:**
